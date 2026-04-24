@@ -1,13 +1,16 @@
 const app = document.getElementById("app");
 
+
 let state = {
     xp: Number(localStorage.getItem("gitquestXP")) || 0,
 
+    level: Number(localStorage.getItem("gitquestLevel")) || 1,
+
+    unlockedAdvanced: localStorage.getItem("gitquestAdvanced") === "true",
+
     repo: {
         commits: [],
-        branches: {
-            main: null
-        },
+        branches: { main: null },
         currentBranch: "main",
         head: null,
         nextId: 1
@@ -16,27 +19,35 @@ let state = {
 
 updateXP();
 
+
 function updateXP() {
     document.getElementById("xp").textContent = state.xp;
     localStorage.setItem("gitquestXP", state.xp);
+    localStorage.setItem("gitquestLevel", state.level);
 }
 
-function gainXP(points) {
-    state.xp += points;
+function gainXP(amount) {
+    state.xp += amount;
+
+    // level up system
+    if (state.xp > state.level * 50) {
+        state.level++;
+        alert("🎉 Level Up! You are now Level " + state.level);
+    }
+
     updateXP();
 }
+
 
 function createCommit(message = "Commit") {
     const id = "c" + state.repo.nextId++;
 
-    const commit = {
+    state.repo.commits.push({
         id,
         message,
         parent: state.repo.head,
         branch: state.repo.currentBranch
-    };
-
-    state.repo.commits.push(commit);
+    });
 
     state.repo.head = id;
     state.repo.branches[state.repo.currentBranch] = id;
@@ -47,18 +58,13 @@ function createCommit(message = "Commit") {
 function createBranch(name) {
     if (!name) return;
 
-    if (state.repo.branches[name]) {
-        alert("Branch already exists.");
-        return;
-    }
-
     state.repo.branches[name] = state.repo.head;
     gainXP(8);
 }
 
 function switchBranch(name) {
     if (!state.repo.branches[name]) {
-        alert("Branch does not exist.");
+        alert("Branch not found");
         return;
     }
 
@@ -68,23 +74,16 @@ function switchBranch(name) {
     gainXP(5);
 }
 
-function mergeBranch(sourceBranch) {
-    if (!state.repo.branches[sourceBranch]) {
-        alert("Branch does not exist.");
-        return;
-    }
-
+function mergeBranch(name) {
     const id = "c" + state.repo.nextId++;
 
-    const commit = {
+    state.repo.commits.push({
         id,
-        message: "Merge " + sourceBranch,
+        message: "Merge " + name,
         parent: state.repo.head,
-        mergeParent: state.repo.branches[sourceBranch],
+        mergeParent: state.repo.branches[name],
         branch: state.repo.currentBranch
-    };
-
-    state.repo.commits.push(commit);
+    });
 
     state.repo.head = id;
     state.repo.branches[state.repo.currentBranch] = id;
@@ -92,17 +91,62 @@ function mergeBranch(sourceBranch) {
     gainXP(15);
 }
 
-function resetRepo() {
-    state.repo = {
-        commits: [],
-        branches: {
-            main: null
-        },
-        currentBranch: "main",
-        head: null,
-        nextId: 1
-    };
+
+function runCommand(input) {
+    const cmd = input.trim();
+
+    if (cmd.startsWith("git commit")) {
+        const msg = cmd.match(/-m\s+"(.+?)"/);
+        createCommit(msg ? msg[1] : "commit");
+        return "Commit created";
+    }
+
+    if (cmd.startsWith("git branch")) {
+        const name = cmd.split(" ")[2];
+        createBranch(name);
+        return "Branch created: " + name;
+    }
+
+    if (cmd.startsWith("git checkout")) {
+        const name = cmd.split(" ")[2];
+        switchBranch(name);
+        return "Switched to " + name;
+    }
+
+    if (cmd.startsWith("git merge")) {
+        const name = cmd.split(" ")[2];
+        mergeBranch(name);
+        return "Merged " + name;
+    }
+
+    return "Unknown command";
 }
+
+
+const lessons = [
+    {
+        title: "What is Git?",
+        text: "Git saves versions of your project like checkpoints in a game.",
+        action: "commit"
+    },
+    {
+        title: "Your First Commit",
+        text: "A commit saves your current work.",
+        action: "commit"
+    },
+    {
+        title: "Branches",
+        text: "Branches let you try new ideas safely.",
+        action: "branch"
+    },
+    {
+        title: "Merging",
+        text: "Merge combines two branches into one.",
+        action: "merge"
+    }
+];
+
+let currentLesson = 0;
 
 
 function renderHome() {
@@ -112,21 +156,20 @@ function renderHome() {
         <h1 class="hero-title">GitQuest</h1>
 
         <p class="hero-sub">
-          Learn Git visually. Build branches, create commits,
-          merge features, and understand history.
+          Learn Git visually through interactive lessons and real commands.
         </p>
 
         <div class="btn-group">
-          <button class="primary" onclick="renderSandbox()">Launch Sandbox</button>
-          <button class="secondary" onclick="renderBeginner()">Beginner Mode</button>
-          <button class="ghost" onclick="renderAdvanced()">Advanced Mode</button>
+          <button class="primary" onclick="startLesson()">Start Learning</button>
+          <button class="secondary" onclick="renderSandbox()">Sandbox</button>
+          <button class="ghost" onclick="renderAdvanced()">Advanced</button>
         </div>
       </div>
 
       <div class="right-panel">
-        <div class="card-title">Git Tree Engine Ready</div>
+        <div class="card-title">Progress System Active</div>
         <div class="card-text">
-          Phase 2 now includes real commit / branch / merge logic.
+          Level: ${state.level} | XP: ${state.xp}
         </div>
 
         <div class="graph-box">
@@ -137,19 +180,22 @@ function renderHome() {
   `;
 }
 
-function renderBeginner() {
+
+function startLesson() {
+    const lesson = lessons[currentLesson];
+
     app.innerHTML = `
     <section class="screen">
       <div class="left-panel">
-        <button class="ghost back-btn" onclick="renderHome()">← Back</button>
+        <h2 class="mode-title">${lesson.title}</h2>
 
-        <h2 class="mode-title">Beginner Mode</h2>
+        <p class="mode-desc">${lesson.text}</p>
 
-        <p class="mode-desc">
-          Learn through buttons and visual actions.
-        </p>
+        <button class="primary" onclick="doLessonAction()">
+          Try Action
+        </button>
 
-        ${controlPanel()}
+        <button class="ghost" onclick="renderHome()">Exit</button>
       </div>
 
       <div class="right-panel">
@@ -161,43 +207,43 @@ function renderBeginner() {
   `;
 }
 
-function renderAdvanced() {
-    app.innerHTML = `
-    <section class="screen">
-      <div class="left-panel">
-        <button class="ghost back-btn" onclick="renderHome()">← Back</button>
+function doLessonAction() {
+    const lesson = lessons[currentLesson];
 
-        <h2 class="mode-title">Advanced Mode</h2>
+    if (lesson.action === "commit") createCommit("lesson commit");
+    if (lesson.action === "branch") createBranch("feature");
+    if (lesson.action === "merge") mergeBranch("feature");
 
-        <p class="mode-desc">
-          Terminal parser comes in Phase 3.
-        </p>
+    gainXP(20);
 
-        ${controlPanel()}
-      </div>
+    currentLesson++;
 
-      <div class="right-panel">
-        <div class="graph-box">
-          ${renderGraph()}
-        </div>
-      </div>
-    </section>
-  `;
+    if (currentLesson >= lessons.length) {
+        state.unlockedAdvanced = true;
+        localStorage.setItem("gitquestAdvanced", "true");
+
+        alert("🎉 Beginner Completed! Advanced Mode Unlocked!");
+        renderHome();
+        return;
+    }
+
+    startLesson();
 }
+
 
 function renderSandbox() {
     app.innerHTML = `
     <section class="screen">
       <div class="left-panel">
-        <button class="ghost back-btn" onclick="renderHome()">← Back</button>
+        <h2 class="mode-title">Sandbox Terminal</h2>
 
-        <h2 class="mode-title">Sandbox</h2>
+        <input id="cmd" placeholder="git commit -m \"test\"" />
 
-        <p class="mode-desc">
-          Free practice with real visual Git engine.
-        </p>
+        <button class="primary" onclick="executeCmd()">Run</button>
 
-        ${controlPanel()}
+        <button class="ghost" onclick="renderHome()">Back</button>
+
+        <div id="output" class="card-text"></div>
       </div>
 
       <div class="right-panel">
@@ -209,134 +255,41 @@ function renderSandbox() {
   `;
 }
 
+function executeCmd() {
+    const input = document.getElementById("cmd").value;
+    const result = runCommand(input);
 
-function controlPanel() {
-    return `
-    <div class="btn-group">
+    document.getElementById("output").innerText = result;
 
-      <button class="primary" onclick="doCommit()">Commit</button>
-
-      <button class="secondary" onclick="doBranch()">Create Branch</button>
-
-      <button class="ghost" onclick="doSwitch()">Switch Branch</button>
-
-      <button class="ghost" onclick="doMerge()">Merge Branch</button>
-
-      <button class="ghost" onclick="doReset()">Reset Repo</button>
-
-    </div>
-
-    <br>
-
-    <div class="card-text">
-      Current Branch: <b>${state.repo.currentBranch}</b><br>
-      HEAD: <b>${state.repo.head || "None"}</b>
-    </div>
-  `;
-}
-
-function doCommit() {
-    const msg = prompt("Commit message:", "New Commit");
-    createCommit(msg || "Commit");
-    rerender();
-}
-
-function doBranch() {
-    const name = prompt("Branch name:", "feature");
-    createBranch(name);
-    rerender();
-}
-
-function doSwitch() {
-    const name = prompt("Switch to branch:", "main");
-    switchBranch(name);
-    rerender();
-}
-
-function doMerge() {
-    const name = prompt("Merge branch into current:", "feature");
-    mergeBranch(name);
-    rerender();
-}
-
-function doReset() {
-    resetRepo();
     rerender();
 }
 
 function renderGraph() {
-    const commits = state.repo.commits;
-
-    let circles = "";
+    let nodes = "";
     let lines = "";
-    let labels = "";
 
-    const positions = {};
+    state.repo.commits.forEach((c, i) => {
+        const x = 150 + i * 120;
+        const y = 100;
 
-    commits.forEach((commit, index) => {
-        const branchOffset = getBranchX(commit.branch);
-        const x = branchOffset;
-        const y = 60 + index * 90;
+        nodes += `<circle cx="${x}" cy="${y}" r="10" fill="#2ea043" />`;
 
-        positions[commit.id] = { x, y };
-
-        if (commit.parent && positions[commit.parent]) {
-            lines += `
-        <line class="line"
-          x1="${positions[commit.parent].x}"
-          y1="${positions[commit.parent].y}"
-          x2="${x}"
-          y2="${y}" />
-      `;
+        if (i > 0) {
+            lines += `<line x1="${150 + (i - 1) * 120}" y1="100" x2="${x}" y2="100" stroke="#58a6ff"/>`;
         }
-
-        if (commit.mergeParent && positions[commit.mergeParent]) {
-            lines += `
-        <line class="merge-line"
-          x1="${positions[commit.mergeParent].x}"
-          y1="${positions[commit.mergeParent].y}"
-          x2="${x}"
-          y2="${y}" />
-      `;
-        }
-
-        circles += `
-      <circle class="node" cx="${x}" cy="${y}" r="12"></circle>
-    `;
-
-        labels += `
-      <text x="${x + 20}" y="${y + 5}" fill="white">
-        ${commit.id} - ${commit.message}
-      </text>
-    `;
     });
 
     return `
-    <svg viewBox="0 0 700 700">
+    <svg viewBox="0 0 800 300">
       ${lines}
-      ${circles}
-      ${labels}
+      ${nodes}
     </svg>
   `;
 }
 
-function getBranchX(branch) {
-    const names = Object.keys(state.repo.branches);
-    const index = names.indexOf(branch);
-    return 140 + index * 180;
-}
 
 function rerender() {
-    const title = document.querySelector(".mode-title");
-
-    if (!title) return renderHome();
-
-    const current = title.textContent;
-
-    if (current.includes("Beginner")) renderBeginner();
-    else if (current.includes("Advanced")) renderAdvanced();
-    else if (current.includes("Sandbox")) renderSandbox();
-    else renderHome();
+    renderHome();
 }
 
 
